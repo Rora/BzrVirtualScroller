@@ -16,14 +16,16 @@
 
 @code {
     private ElementReference _containerElement;
+    private List<Func<Task>> _actionsAfterNextRender = new List<Func<Task>>(); //This allows us to call JS after blazor rendered
+    private bool _pauseRendering = false; //setting this prevent useless renders on await in the middle of a function
+
     private int _nrOfItemsAboveViewPort = 20;
     private int _nrOfItemsInViewPort = 5;
     private int _nrOfItemsBelowViewPort = 20;
     private int _refreshItemsListThreshold = 10; //The nr of items remaining before loading new entries
     private VirtualScrollerEntry _currentItem;
-    private List<VirtualScrollerEntry> _items;
+    private List<VirtualScrollerEntry> _items = new List<VirtualScrollerEntry>();
     private Func<ItemProducerArgs, Task<IEnumerable<VirtualScrollerEntry>>> _itemProducer;
-    private List<Func<Task>> _actionsAfterNextRender = new List<Func<Task>>(); //This allows us to call JS after blazor rendered
 
     protected override async Task OnInitializedAsync()
     {
@@ -53,10 +55,33 @@
         await UpdateItemsListAsync();
     }
 
+    /// <summary>
+    /// Updates the items list if the user has scrolled near the top or botttom
+    /// This method tries to retain the same nr of elements for perf reasons. 
+    ///     The optimization has 1 exception:
+    ///     When the user scrolls near the end (can be top or bottom) of the list the nr of elements will decrease
+    /// </summary>
+    /// <returns></returns>
     private async Task UpdateItemsListAsync()
     {
         Logger.LogDebug("Updating items list");
-        var actionsAfterRender = new List<Func<Task>>();
+        _pauseRendering = true;
+
+        if(await AddBottomItemsIfBottomIsInSightAsync())
+        {
+            RemoveTopItemsIfTopIsFarAway();
+        }
+
+        if(await PrependTopItemsIfTopIsInSightAsync())
+        {
+            RemoveBottomItemsIfBottomIsFarAway();
+        }
+
+        _pauseRendering = false;
+    }
+
+    private async Task<bool> AddBottomItemsIfBottomIsInSightAsync()
+    {
         var currentItemIndex = _items.IndexOf(_currentItem);
 
         //Check if threshold below current item reached
@@ -67,17 +92,16 @@
             var nrOfItemsToLoad = _nrOfItemsBelowViewPort - nrOfItemsBelowCurrentItem;
             var newItems = await GetItemsAfterIdAsync(_items.Last().Id, nrOfItemsToLoad);
             _items.AddRange(newItems.Take(nrOfItemsToLoad));
+            return true;
         }
 
-        //Check if there are to many items are below the current item
-        if (nrOfItemsBelowCurrentItem > _nrOfItemsBelowViewPort)
-        {
-            Logger.LogDebug("Removing items from the bottom of the list");
-            var nrOfItemsToRemove = nrOfItemsBelowCurrentItem - _nrOfItemsBelowViewPort;
-            _items = _items.Take(_items.Count - nrOfItemsToRemove).ToList();
-        }
+        return false;
+    }
 
+    private async Task<bool> PrependTopItemsIfTopIsInSightAsync()
+    {
         //Check if threshold above current item reached
+        var currentItemIndex = _items.IndexOf(_currentItem);
         var nrOfItemsAboveCurrentItem = currentItemIndex;
         if (nrOfItemsAboveCurrentItem < _refreshItemsListThreshold)
         {
@@ -86,6 +110,35 @@
             var newItems = await GetItemsBeforeIdAsync(_items[0].Id, nrOfItemsToLoad);
             _items.InsertRange(0, newItems.Take(nrOfItemsToLoad).Reverse());
             _actionsAfterNextRender.Add(async () => await JSRuntime.InvokeAsync<bool>("bzrVirtualScroller.scrollPastTopItems", _containerElement, nrOfItemsToLoad));
+            return true;
+        }
+
+        return false;
+    }
+
+    private void RemoveBottomItemsIfBottomIsFarAway()
+    {
+        //Check if there are to many items below the current item
+        var currentItemIndex = _items.IndexOf(_currentItem);
+        var nrOfItemsBelowCurrentItem = _items.Count - currentItemIndex;
+        if (nrOfItemsBelowCurrentItem > _nrOfItemsBelowViewPort)
+        {
+            Logger.LogDebug("Removing items from the bottom of the list");
+            var nrOfItemsToRemove = nrOfItemsBelowCurrentItem - _nrOfItemsBelowViewPort;
+            _items = _items.Take(_items.Count - nrOfItemsToRemove).ToList();
+        }
+    }
+
+    private void RemoveTopItemsIfTopIsFarAway()
+    {
+        //Check if there are to many items above the current item
+        var currentItemIndex = _items.IndexOf(_currentItem);
+        var nrOfItemsAboveCurrentItem = currentItemIndex;
+        if (nrOfItemsAboveCurrentItem > _nrOfItemsAboveViewPort)
+        {
+            Logger.LogDebug("Removing items from the top of the list");
+            var nrOfItemsToRemove = nrOfItemsAboveCurrentItem - _nrOfItemsAboveViewPort;
+            _items = _items.Skip(nrOfItemsToRemove).ToList();
         }
     }
 
@@ -104,28 +157,31 @@
         }
     }
 
+    protected override bool ShouldRender()
+    {
+        return _pauseRendering ? false : base.ShouldRender();
+    }
+
     private void SetDummyData()
     {
-        _itemProducer = (ItemProducerArgs args) =>
+        _itemProducer = async (ItemProducerArgs args) =>
         {
+            await Task.Delay(100); //Simulate a delay to see more realistic perf
+
             if (args.ItemId == null)
             {
-                return Task.FromResult((IEnumerable<VirtualScrollerEntry>)Enumerable.Range(1, args.NrOfItemsToLoad)
+                return (IEnumerable<VirtualScrollerEntry>)Enumerable.Range(1, args.NrOfItemsToLoad)
                     .Select(i => new VirtualScrollerEntry { Id = i, Value = i.ToString() })
-                    .ToArray());
+                    .ToArray();
             }
-
-            Logger.LogDebug("id=" + args.ItemId.Value);
-            Logger.LogDebug("beginIndex=" + (args.ItemId.Value - args.NrOfItemsToLoad - 1));
-            Logger.LogDebug("NrOfItemsToLoad=" + args.NrOfItemsToLoad);
 
             var items = args.ScrollDirection == ScrollDirection.Down
                 ? Enumerable.Range(args.ItemId.Value + 1, args.NrOfItemsToLoad)
                 : Enumerable.Range(args.ItemId.Value - args.NrOfItemsToLoad, args.NrOfItemsToLoad).Reverse();
 
-            return Task.FromResult((IEnumerable<VirtualScrollerEntry>)items
+            return (IEnumerable<VirtualScrollerEntry>)items
                 .Select(i => new VirtualScrollerEntry { Id = i, Value = i.ToString() })
-                .ToArray());
+                .ToArray();
         };
 
         _currentItem = null;
