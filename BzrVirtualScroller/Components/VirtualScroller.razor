@@ -50,14 +50,22 @@
         Logger.LogDebug("Updating items list");
         var currentItemIndex = _items.IndexOf(_currentItem);
 
-        //Threshold below current item reached
+        //Check if threshold below current item reached
         var nrOfItemsBelowCurrentItem = _items.Count - 1 - currentItemIndex;
         if (nrOfItemsBelowCurrentItem < _refreshItemsListThreshold)
         {
             Logger.LogDebug("Loading items to add below the list");
             var nrOfItemsToLoad = _nrOfItemsBelowViewPort - nrOfItemsBelowCurrentItem;
             var newItems = await GetItemsAfterIdAsync(_items.Last().Id, nrOfItemsToLoad);
-            _items.AddRange(newItems);
+            _items.AddRange(newItems.Take(nrOfItemsToLoad));
+        }
+
+        //Check if there are to many items are below the current item
+        if(nrOfItemsBelowCurrentItem > _nrOfItemsBelowViewPort)
+        {
+            Logger.LogDebug("Removing items from the bottom of the list");
+            var nrOfItemsToRemove = nrOfItemsBelowCurrentItem - _nrOfItemsBelowViewPort;
+            _items = _items.Take(_items.Count - nrOfItemsToRemove).ToList();
         }
     }
 
