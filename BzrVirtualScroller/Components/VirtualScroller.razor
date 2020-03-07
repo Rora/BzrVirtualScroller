@@ -7,7 +7,7 @@
     @for (var i = 0; i < _items.Count; i++)
     {
         var index = i; /* we do this since i will change in the next iteration so it can't be used in lambda's */
-        <div style="border: 1px solid black; height: 200px; padding: 10px; margin-bottom: 10px;">
+        <div @key="_items[i].Id" style="border: 1px solid black; height: 200px; padding: 10px; margin-bottom: 10px;">
             @_items[i].Value <button @onclick="(async () => await SetCurrentItemAsync(index))" >Set as current item</button>
         </div>
     }
@@ -33,9 +33,14 @@
             .ToList();
     }
 
-    private async Task<IEnumerable<VirtualScrollerEntry>> GetItemsAfterIdAsync(int afterItemsId, int nrOfItems)
+    private async Task<IEnumerable<VirtualScrollerEntry>> GetItemsAfterIdAsync(int afterItemId, int nrOfItems)
     {
-        return await _itemProducer(new ItemProducerArgs { ItemId = afterItemsId, NrOfItemsToLoad = nrOfItems, ScrollDirection = ScrollDirection.Down });
+        return await _itemProducer(new ItemProducerArgs { ItemId = afterItemId, NrOfItemsToLoad = nrOfItems, ScrollDirection = ScrollDirection.Down });
+    }
+
+    private async Task<IEnumerable<VirtualScrollerEntry>> GetItemsBeforeIdAsync(int beforeItemId, int nrOfItems)
+    {
+        return await _itemProducer(new ItemProducerArgs { ItemId = beforeItemId, NrOfItemsToLoad = nrOfItems, ScrollDirection = ScrollDirection.Up });
     }
 
     private async Task SetCurrentItemAsync(int index)
@@ -51,10 +56,10 @@
         var currentItemIndex = _items.IndexOf(_currentItem);
 
         //Check if threshold below current item reached
-        var nrOfItemsBelowCurrentItem = _items.Count - 1 - currentItemIndex;
+        var nrOfItemsBelowCurrentItem = _items.Count - currentItemIndex;
         if (nrOfItemsBelowCurrentItem < _refreshItemsListThreshold)
         {
-            Logger.LogDebug("Loading items to add below the list");
+            Logger.LogDebug("Loading items to add to the bottom of the list");
             var nrOfItemsToLoad = _nrOfItemsBelowViewPort - nrOfItemsBelowCurrentItem;
             var newItems = await GetItemsAfterIdAsync(_items.Last().Id, nrOfItemsToLoad);
             _items.AddRange(newItems.Take(nrOfItemsToLoad));
@@ -67,6 +72,17 @@
             var nrOfItemsToRemove = nrOfItemsBelowCurrentItem - _nrOfItemsBelowViewPort;
             _items = _items.Take(_items.Count - nrOfItemsToRemove).ToList();
         }
+
+        //Check if threshold above current item reached
+        var nrOfItemsAboveCurrentItem = currentItemIndex;
+        if (nrOfItemsAboveCurrentItem < _refreshItemsListThreshold)
+        {
+            Logger.LogDebug("Loading items to add to the top of the list");
+            var nrOfItemsToLoad = _nrOfItemsAboveViewPort - nrOfItemsAboveCurrentItem;
+            var newItems = await GetItemsBeforeIdAsync(_items[0].Id, nrOfItemsToLoad);
+            _items.InsertRange(0, newItems.Take(nrOfItemsToLoad).Reverse());
+        }
+
     }
 
     private void SetDummyData()
@@ -80,9 +96,13 @@
                     .ToArray());
             }
 
+            Logger.LogDebug("id=" + args.ItemId.Value);
+            Logger.LogDebug("beginIndex=" + (args.ItemId.Value - args.NrOfItemsToLoad - 1));
+            Logger.LogDebug("NrOfItemsToLoad=" + args.NrOfItemsToLoad);
+
             var items = args.ScrollDirection == ScrollDirection.Down
                 ? Enumerable.Range(args.ItemId.Value + 1, args.NrOfItemsToLoad)
-                : Enumerable.Range(args.ItemId.Value - args.NrOfItemsToLoad - 1, args.NrOfItemsToLoad).Reverse();
+                : Enumerable.Range(args.ItemId.Value - args.NrOfItemsToLoad, args.NrOfItemsToLoad).Reverse();
 
             return Task.FromResult((IEnumerable<VirtualScrollerEntry>) items
                 .Select(i => new VirtualScrollerEntry { Id = i, Value = i.ToString() })
