@@ -1,19 +1,21 @@
-﻿@using Microsoft.Extensions.Logging 
+﻿@using Microsoft.Extensions.Logging
 @inject ILogger<VirtualScroller> Logger
+@inject IJSRuntime JSRuntime
 
-<div id="viewContainer">
-    <div>Current item @_currentItem?.Value</div>
+<div>Current item @_currentItem?.Value</div>
+<div @ref="_containerElement">
 
     @for (var i = 0; i < _items.Count; i++)
     {
         var index = i; /* we do this since i will change in the next iteration so it can't be used in lambda's */
         <div @key="_items[i].Id" style="border: 1px solid black; height: 200px; padding: 10px; margin-bottom: 10px;">
-            @_items[i].Value <button @onclick="(async () => await SetCurrentItemAsync(index))" >Set as current item</button>
+            @_items[i].Value <button @onclick="(async () => await SetCurrentItemAsync(index))">Set as current item</button>
         </div>
     }
 </div>
 
 @code {
+    private ElementReference _containerElement;
     private int _nrOfItemsAboveViewPort = 20;
     private int _nrOfItemsInViewPort = 5;
     private int _nrOfItemsBelowViewPort = 20;
@@ -21,6 +23,7 @@
     private VirtualScrollerEntry _currentItem;
     private List<VirtualScrollerEntry> _items;
     private Func<ItemProducerArgs, Task<IEnumerable<VirtualScrollerEntry>>> _itemProducer;
+    private List<Func<Task>> _actionsAfterNextRender = new List<Func<Task>>(); //This allows us to call JS after blazor rendered
 
     protected override async Task OnInitializedAsync()
     {
@@ -53,6 +56,7 @@
     private async Task UpdateItemsListAsync()
     {
         Logger.LogDebug("Updating items list");
+        var actionsAfterRender = new List<Func<Task>>();
         var currentItemIndex = _items.IndexOf(_currentItem);
 
         //Check if threshold below current item reached
@@ -66,7 +70,7 @@
         }
 
         //Check if there are to many items are below the current item
-        if(nrOfItemsBelowCurrentItem > _nrOfItemsBelowViewPort)
+        if (nrOfItemsBelowCurrentItem > _nrOfItemsBelowViewPort)
         {
             Logger.LogDebug("Removing items from the bottom of the list");
             var nrOfItemsToRemove = nrOfItemsBelowCurrentItem - _nrOfItemsBelowViewPort;
@@ -81,17 +85,32 @@
             var nrOfItemsToLoad = _nrOfItemsAboveViewPort - nrOfItemsAboveCurrentItem;
             var newItems = await GetItemsBeforeIdAsync(_items[0].Id, nrOfItemsToLoad);
             _items.InsertRange(0, newItems.Take(nrOfItemsToLoad).Reverse());
+            _actionsAfterNextRender.Add(async () => await JSRuntime.InvokeAsync<bool>("bzrVirtualScroller.scrollPastTopItems", _containerElement, nrOfItemsToLoad));
         }
+    }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        await base.OnAfterRenderAsync(firstRender);
+
+        if (_actionsAfterNextRender.Any())
+        {
+            //Run JS after render
+            foreach (var actionAfterRenderAsync in _actionsAfterNextRender)
+            {
+                await actionAfterRenderAsync();
+            }
+            _actionsAfterNextRender.Clear();
+        }
     }
 
     private void SetDummyData()
     {
         _itemProducer = (ItemProducerArgs args) =>
         {
-            if(args.ItemId == null)
+            if (args.ItemId == null)
             {
-                return Task.FromResult((IEnumerable<VirtualScrollerEntry>) Enumerable.Range(1, args.NrOfItemsToLoad)
+                return Task.FromResult((IEnumerable<VirtualScrollerEntry>)Enumerable.Range(1, args.NrOfItemsToLoad)
                     .Select(i => new VirtualScrollerEntry { Id = i, Value = i.ToString() })
                     .ToArray());
             }
@@ -104,7 +123,7 @@
                 ? Enumerable.Range(args.ItemId.Value + 1, args.NrOfItemsToLoad)
                 : Enumerable.Range(args.ItemId.Value - args.NrOfItemsToLoad, args.NrOfItemsToLoad).Reverse();
 
-            return Task.FromResult((IEnumerable<VirtualScrollerEntry>) items
+            return Task.FromResult((IEnumerable<VirtualScrollerEntry>)items
                 .Select(i => new VirtualScrollerEntry { Id = i, Value = i.ToString() })
                 .ToArray());
         };
