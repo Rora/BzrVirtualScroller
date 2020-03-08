@@ -1,4 +1,6 @@
-﻿@using Microsoft.Extensions.Logging
+﻿@using System.Threading
+@using Microsoft.Extensions.Logging
+
 @implements IDisposable
 @inject ILogger<VirtualScroller> Logger
 @inject IJSRuntime JSRuntime
@@ -21,7 +23,7 @@
     private ElementReference _containerElement;
     private List<Func<ValueTask>> _actionsAfterNextRender = new List<Func<ValueTask>>(); //This allows us to call JS after blazor rendered
     private bool _pauseRendering = false; //setting this prevent useless renders on await in the middle of a function
-    private bool _enableViewPortObserving = false; //viewport observing before init is dodgy
+    private bool _enableViewPortObserving = true; //viewport observing before init is dodgy
 
     private int _nrOfItemsAboveViewPort = 20;
     private int _nrOfItemsInViewPort = 5;
@@ -65,22 +67,37 @@
 
     //This lock prevents multiple UpdateViewportAsync calls running concurrently (this method isn't thread safe)
     System.Threading.SemaphoreSlim _updateViewportLock = new System.Threading.SemaphoreSlim(1);
+    private Guid _lastUpdateViewportAsyncCall;
 
     [JSInvokable]
     public async Task UpdateViewportAsync(IEnumerable<string> visibleItemIds)
     {
+        //Nothing visible keep things as they were
+        if (!visibleItemIds.Any())
+        {
+            return;
+        }
+
+        var callId = Guid.NewGuid();
+        _lastUpdateViewportAsyncCall = callId;
+
         await _updateViewportLock.WaitAsync();
+
+        //When a user scrolls fast multiple call can be waiting, in that case we only want the last one
+        if (_lastUpdateViewportAsyncCall != callId)
+        {
+            _updateViewportLock.Release();
+            return;
+        }
+
         _pauseRendering = true;
 
         Logger.LogDebug("{0} invoked with ids {1}", nameof(UpdateViewportAsync), string.Join(", ", visibleItemIds));
 
-        //Ignore the first update
-        if (!_enableViewPortObserving)
-        {
-            _enableViewPortObserving = true;
-            _updateViewportLock.Release();
-            return;
-        }
+        var itemIndexes = visibleItemIds
+            .Select(id => _items.FindIndex(entry => entry.Id == id))
+            .OrderBy(itemIndex => itemIndex)
+            .ToArray();
 
         //Nothing visible keep things as they were
         if (!visibleItemIds.Any())
@@ -89,13 +106,6 @@
             return;
         }
 
-        Logger.LogDebug("'{0}'", visibleItemIds.First());
-        Logger.LogDebug("AllItems {0}", string.Join(", ", _items.Select(e => e.Id)));
-
-        var itemIndexes = visibleItemIds
-            .Select(id => _items.FindIndex(entry => entry.Id == id))
-            .OrderBy(itemIndex => itemIndex)
-            .ToArray();
         var topViewPortItemIndex = itemIndexes.First();
         var bottomViewPortItemIndex = itemIndexes.Last();
 
@@ -259,7 +269,7 @@
         {
             await Task.Delay(100); //Simulate a delay to see more realistic perf
 
-            if (args.ItemId == null)
+        if (args.ItemId == null)
             {
                 return (IEnumerable<VirtualScrollerEntry>)Enumerable.Range(1, args.NrOfItemsToLoad)
                     .Select(i => new VirtualScrollerEntry { Id = i.ToString(), Value = i.ToString() })
