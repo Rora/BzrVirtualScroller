@@ -13,7 +13,7 @@
         var index = i; /* we do this since i will change in the next iteration so it can't be used in lambda's */
         var item = _items[i];
         <div @key="item.Id" data-bzr-virtual-scroller-item-id="@item.Id" style="border: 1px solid black; height: 200px; padding: 10px; margin-bottom: 10px;">
-            @item.Value <button @onclick="(async () => await SetCurrentItemAsync(index))">Set as current item</button>
+            @item.Value 
         </div>
     }
 </div>
@@ -23,11 +23,9 @@
     private ElementReference _containerElement;
     private List<Func<ValueTask>> _actionsAfterNextRender = new List<Func<ValueTask>>(); //This allows us to call JS after blazor rendered
     private bool _pauseRendering = false; //setting this prevent useless renders on await in the middle of a function
-    private bool _enableViewPortObserving = true; //viewport observing before init is dodgy
 
-    private int _nrOfItemsAboveViewPort = 20;
-    private int _nrOfItemsInViewPort = 5;
-    private int _nrOfItemsBelowViewPort = 20;
+    private int _wantedNrOfItemsAboveViewPort = 20;
+    private int _wantedNrOfItemsBelowViewPort = 20;
     private int _refreshItemsListThreshold = 10; //The nr of items remaining before loading new entries
     private VirtualScrollerEntry _currentItem;
     private List<VirtualScrollerEntry> _items = new List<VirtualScrollerEntry>();
@@ -39,12 +37,15 @@
         SetDummyData();
 
         _virtualScrollerObjRef = DotNetObjectReference.Create(this);
-        var itemsInViewPort = await _itemProducer(new ItemProducerArgs { NrOfItemsToLoad = _nrOfItemsBelowViewPort, ScrollDirection = ScrollDirection.Down });
-        _items = itemsInViewPort
-            .Concat(await GetItemsAfterIdAsync(itemsInViewPort.Last().Id, _nrOfItemsBelowViewPort))
+        var itemsInViewPort = await _itemProducer(new ItemProducerArgs { NrOfItemsToLoad = _wantedNrOfItemsBelowViewPort, ScrollDirection = ScrollDirection.Down });
+        var itemsBeforeViewPort = (await GetItemsBeforeIdAsync(itemsInViewPort.First().Id, _wantedNrOfItemsAboveViewPort));
+        _items = itemsBeforeViewPort.Reverse()
+            .Concat(itemsInViewPort)
+            .Concat(await GetItemsAfterIdAsync(itemsInViewPort.Last().Id, _wantedNrOfItemsBelowViewPort))
             .ToList();
-
+        
         ScheduleAsyncActionAfterRender(() => JSRuntime.InvokeVoidAsync("bzrVirtualScroller.init", _containerElement, _virtualScrollerObjRef));
+        ScheduleAsyncActionAfterRender(() => JSRuntime.InvokeVoidAsync("bzrVirtualScroller.scrollPastTopItems", itemsBeforeViewPort.Count()));
         ScheduleAsyncActionAfterRender(() => JSRuntime.InvokeVoidAsync("bzrVirtualScroller.ensureAllItemIntersectionsAreObserved"));
     }
 
@@ -56,13 +57,6 @@
     private async Task<IEnumerable<VirtualScrollerEntry>> GetItemsBeforeIdAsync(string beforeItemId, int nrOfItems)
     {
         return await _itemProducer(new ItemProducerArgs { ItemId = beforeItemId, NrOfItemsToLoad = nrOfItems, ScrollDirection = ScrollDirection.Up });
-    }
-
-    private async Task SetCurrentItemAsync(int index)
-    {
-        Logger.LogDebug("Setting current item index {0}", index);
-        _currentItem = _items[index];
-        await UpdateItemsListAsync();
     }
 
     //This lock prevents multiple UpdateViewportAsync calls running concurrently (this method isn't thread safe)
@@ -165,12 +159,11 @@
         var currentItemIndex = _items.IndexOf(_currentItem);
 
         //Check if threshold below current item reached
-        var nrOfItemsBelowCurrentItem = _items.Count - currentItemIndex;
+        var nrOfItemsBelowCurrentItem = _items.Count - currentItemIndex - 1;
         if (nrOfItemsBelowCurrentItem < _refreshItemsListThreshold)
         {
-            Logger.LogDebug("Loading items to add to the bottom of the list");
-            //TODO see why only 19 are added and not 20
-            var nrOfItemsToLoad = _nrOfItemsBelowViewPort - nrOfItemsBelowCurrentItem;
+            var nrOfItemsToLoad = _wantedNrOfItemsBelowViewPort - nrOfItemsBelowCurrentItem;
+            Logger.LogDebug("Loading {0} items to add to the bottom of the list", nrOfItemsToLoad);
             var newItems = await GetItemsAfterIdAsync(_items.Last().Id, nrOfItemsToLoad);
             _items.AddRange(newItems.Take(nrOfItemsToLoad));
             return true;
@@ -187,7 +180,7 @@
         if (nrOfItemsAboveCurrentItem < _refreshItemsListThreshold)
         {
             Logger.LogDebug("Loading items to add to the top of the list");
-            var nrOfItemsToLoad = _nrOfItemsAboveViewPort - nrOfItemsAboveCurrentItem;
+            var nrOfItemsToLoad = _wantedNrOfItemsAboveViewPort - nrOfItemsAboveCurrentItem;
             var newItems = await GetItemsBeforeIdAsync(_items[0].Id, nrOfItemsToLoad);
             _items.InsertRange(0, newItems.Take(nrOfItemsToLoad).Reverse());
             ScheduleAsyncActionAfterRender(async () => await JSRuntime.InvokeAsync<bool>("bzrVirtualScroller.scrollPastTopItems", nrOfItemsToLoad));
@@ -202,10 +195,10 @@
         //Check if there are to many items below the current item
         var currentItemIndex = _items.IndexOf(_currentItem);
         var nrOfItemsBelowCurrentItem = _items.Count - currentItemIndex;
-        if (nrOfItemsBelowCurrentItem > _nrOfItemsBelowViewPort)
+        if (nrOfItemsBelowCurrentItem > _wantedNrOfItemsBelowViewPort)
         {
             Logger.LogDebug("Removing items from the bottom of the list");
-            var nrOfItemsToRemove = nrOfItemsBelowCurrentItem - _nrOfItemsBelowViewPort;
+            var nrOfItemsToRemove = nrOfItemsBelowCurrentItem - _wantedNrOfItemsBelowViewPort;
             _items = _items.Take(_items.Count - nrOfItemsToRemove).ToList();
         }
     }
@@ -215,10 +208,10 @@
         //Check if there are to many items above the current item
         var currentItemIndex = _items.IndexOf(_currentItem);
         var nrOfItemsAboveCurrentItem = currentItemIndex;
-        if (nrOfItemsAboveCurrentItem > _nrOfItemsAboveViewPort)
+        if (nrOfItemsAboveCurrentItem > _wantedNrOfItemsAboveViewPort)
         {
             Logger.LogDebug("Removing items from the top of the list");
-            var nrOfItemsToRemove = nrOfItemsAboveCurrentItem - _nrOfItemsAboveViewPort;
+            var nrOfItemsToRemove = nrOfItemsAboveCurrentItem - _wantedNrOfItemsAboveViewPort;
             _items = _items.Skip(nrOfItemsToRemove).ToList();
         }
     }
