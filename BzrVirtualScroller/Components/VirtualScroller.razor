@@ -51,11 +51,14 @@
         ScheduleAsyncActionAfterRender(() => JSRuntime.InvokeVoidAsync("bzrVirtualScroller.scrollPastTopItems", _virtualScrollerObjRef, itemsBeforeViewPort.Count()));
         ScheduleAsyncActionAfterRender(() => JSRuntime.InvokeVoidAsync("bzrVirtualScroller.ensureAllItemIntersectionsAreObserved", _virtualScrollerObjRef));
     }
+    
+    private void LogDebug(string msgTpl, params object[] tplArgs) => Log(LogLevel.Debug, msgTpl, tplArgs);
+    private void LogError(string msgTpl, params object[] tplArgs) => Log(LogLevel.Error, msgTpl, tplArgs);
 
-    private void LogDebug(string msgTpl, params object[] tplArgs)
+    private void Log(LogLevel level, string msgTpl, params object[] tplArgs)
     {
         msgTpl = string.Format("[{0}] {1}", _instanceId, msgTpl);
-        Logger.LogDebug(msgTpl, tplArgs);
+        Logger.Log(level, msgTpl, tplArgs);
     }
 
     private async Task<IEnumerable<VirtualScrollerEntry>> GetItemsAfterIdAsync(string afterItemId, int nrOfItems)
@@ -291,9 +294,18 @@
         _currentItem = null;
     }
 
-    public void Dispose()
+    public async void Dispose() //IAsyncDisposable not yet supported see https://github.com/dotnet/aspnetcore/issues/9960
     {
-        this._virtualScrollerObjRef?.Dispose();
+        LogDebug("Disposing...");
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("bzrVirtualScroller.dispose", _virtualScrollerObjRef);
+            _virtualScrollerObjRef?.Dispose();
+        }
+        catch(Exception e)
+        {
+            //Since async void effectively is a fire and forget, we need to do the error handling
+            LogError("Exception occurred while disposing VirtualScroller: {0}", e);
+        }
     }
-
 }
