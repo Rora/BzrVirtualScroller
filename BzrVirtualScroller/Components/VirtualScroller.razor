@@ -184,6 +184,9 @@
         var nrOfItemsBelowCurrentItem = _items.Count - currentItemIndex - 1;
         if (nrOfItemsBelowCurrentItem < _refreshItemsListThreshold)
         {
+            //Ensure we're not at the absolute bottom when adding new items since that would stick even when we add new items
+            await JSRuntime.InvokeVoidAsync("bzrVirtualScroller.ensureUserIsNotScrolledToTheBottom", _virtualScrollerObjRef);
+
             var nrOfItemsToLoad = _wantedNrOfItemsBelowViewPort - nrOfItemsBelowCurrentItem;
             LogDebug("Loading {0} items to add to the bottom of the list", nrOfItemsToLoad);
             var newItems = await GetItemsAfterIdAsync(_items.Last().Id, nrOfItemsToLoad);

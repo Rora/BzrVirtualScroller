@@ -80,9 +80,23 @@
             return true;
         },
 
+        //TODO make this work for scrolling within a container
+        ensureUserIsNotScrolledToTheBottom: (dotnetRef) => {
+            var containerScrollHeight = ((document.documentElement && document.documentElement.scrollHeight) || document.body.scrollHeight);
+            containerScrollHeight = containerScrollHeight - 2; //This fixes an offset issue on macOS
+            if ((window.innerHeight + window.scrollY) >= containerScrollHeight) {
+                // you're at the bottom of the page
+                window.scrollBy(0, -1);
+            }
+        },
+
         dispose: (dotnetRef) => {
             _states.get(dotnetRef._id).observer.disconnect();
             _states.delete(dotnetRef._id);
         }
     };
 })();
+
+function A() {
+    window.scrollTo(0, ((document.documentElement && document.documentElement.scrollHeight) || document.body.scrollHeight));
+}
