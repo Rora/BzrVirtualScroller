@@ -51,7 +51,7 @@
         ScheduleAsyncActionAfterRender(() => JSRuntime.InvokeVoidAsync("bzrVirtualScroller.scrollPastTopItems", _virtualScrollerObjRef, itemsBeforeViewPort.Count()));
         ScheduleAsyncActionAfterRender(() => JSRuntime.InvokeVoidAsync("bzrVirtualScroller.ensureAllItemIntersectionsAreObserved", _virtualScrollerObjRef));
     }
-    
+
     private void LogDebug(string msgTpl, params object[] tplArgs) => Log(LogLevel.Debug, msgTpl, tplArgs);
     private void LogError(string msgTpl, params object[] tplArgs) => Log(LogLevel.Error, msgTpl, tplArgs);
 
@@ -104,6 +104,16 @@
             .Select(id => _items.FindIndex(entry => entry.Id == id))
             .OrderBy(itemIndex => itemIndex)
             .ToArray();
+
+        //Detect outdated calls
+        if(itemIndexes.Contains(-1))
+        {
+            LogDebug("{0} called with a nonexisting itemId(s), assuming this is an outdated event. visibleItemIds: {1}.", 
+                nameof(UpdateViewportAsync), string.Join(", ", visibleItemIds));
+            
+            _updateViewportLock.Release();
+            return;
+        }
 
         //Nothing visible keep things as they were
         if (!visibleItemIds.Any())
