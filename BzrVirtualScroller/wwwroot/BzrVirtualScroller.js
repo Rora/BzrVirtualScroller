@@ -1,6 +1,6 @@
 ﻿window.bzrVirtualScroller = (function () {
 
-    _states = [];
+    _states = {};
 
     onItemEnteredOrLeftViewPort = function (state, entries, observer) {
         let anyChange = false;
@@ -39,20 +39,18 @@
 
     return {
         init: (containerElement, dotnetRef) => {
-            _states[containerElement] = {
+            _states[dotnetRef._id] = {
                 dotnetRef: dotnetRef,
-                observer: new IntersectionObserver((e, o) => onItemEnteredOrLeftViewPort(_states[containerElement], e, o), { root: null, threshold: [0, 0.01] }),
+                containerElement: containerElement,
+                observer: new IntersectionObserver((e, o) => onItemEnteredOrLeftViewPort(_states[dotnetRef._id], e, o), { root: null, threshold: [0, 0.01] }),
                 visibleItemIds: [],
             };
         },
 
-        /**
-        * @param {HTMLElement} containerElement
-        */
-        ensureAllItemIntersectionsAreObserved: (containerElement) => {
+        ensureAllItemIntersectionsAreObserved: (dotnetRef) => {
 
             let markingAttrName = 'intersectionObserverd';
-            let allItems = containerElement.children;
+            let allItems = _states[dotnetRef._id].containerElement.children;
             for (let i = 0; i < allItems.length; i++) {
 
                 let item = allItems[i];
@@ -60,19 +58,15 @@
 
                 if (markingAttr !== 'marked') {
                     //Will be unobserved once the dom element is deleted
-                    _states[containerElement].observer.observe(item);
+                    _states[dotnetRef._id].observer.observe(item);
                     item.setAttribute(markingAttrName, 'marked');
                 }
             }
         },
 
-        /**
-        * @param {HTMLElement} containerElement
-        * @param {Number} nrOfItems
-        */
-        scrollPastTopItems: (containerElement, nrOfItems) => {
+        scrollPastTopItems: (dotnetRef, nrOfItems) => {
 
-            let items = containerElement.children;
+            let items = _states[dotnetRef._id].containerElement.children;
             let totalHeightToScroll = 0;
 
             for (let i = 0; i < nrOfItems; i++) {

@@ -19,6 +19,9 @@
 </div>
 
 @code {
+    private static int _lastInstanceNr = 0;
+
+    private int _instanceId;
     private DotNetObjectReference<VirtualScroller> _virtualScrollerObjRef;
     private ElementReference _containerElement;
     private List<Func<ValueTask>> _actionsAfterNextRender = new List<Func<ValueTask>>(); //This allows us to call JS after blazor rendered
@@ -34,8 +37,8 @@
     protected override async Task OnInitializedAsync()
     {
         await base.OnInitializedAsync();
+        _instanceId = ++_lastInstanceNr;
         SetDummyData();
-
         _virtualScrollerObjRef = DotNetObjectReference.Create(this);
         var itemsInViewPort = await _itemProducer(new ItemProducerArgs { NrOfItemsToLoad = _wantedNrOfItemsBelowViewPort, ScrollDirection = ScrollDirection.Down });
         var itemsBeforeViewPort = (await GetItemsBeforeIdAsync(itemsInViewPort.First().Id, _wantedNrOfItemsAboveViewPort));
@@ -43,10 +46,16 @@
             .Concat(itemsInViewPort)
             .Concat(await GetItemsAfterIdAsync(itemsInViewPort.Last().Id, _wantedNrOfItemsBelowViewPort))
             .ToList();
-        
+
         ScheduleAsyncActionAfterRender(() => JSRuntime.InvokeVoidAsync("bzrVirtualScroller.init", _containerElement, _virtualScrollerObjRef));
-        ScheduleAsyncActionAfterRender(() => JSRuntime.InvokeVoidAsync("bzrVirtualScroller.scrollPastTopItems", _containerElement, itemsBeforeViewPort.Count()));
-        ScheduleAsyncActionAfterRender(() => JSRuntime.InvokeVoidAsync("bzrVirtualScroller.ensureAllItemIntersectionsAreObserved", _containerElement));
+        ScheduleAsyncActionAfterRender(() => JSRuntime.InvokeVoidAsync("bzrVirtualScroller.scrollPastTopItems", _virtualScrollerObjRef, itemsBeforeViewPort.Count()));
+        ScheduleAsyncActionAfterRender(() => JSRuntime.InvokeVoidAsync("bzrVirtualScroller.ensureAllItemIntersectionsAreObserved", _virtualScrollerObjRef));
+    }
+
+    private void LogDebug(string msgTpl, params object[] tplArgs)
+    {
+        msgTpl = string.Format("[{0}] {1}", _instanceId, msgTpl);
+        Logger.LogDebug(msgTpl, tplArgs);
     }
 
     private async Task<IEnumerable<VirtualScrollerEntry>> GetItemsAfterIdAsync(string afterItemId, int nrOfItems)
@@ -86,7 +95,7 @@
 
         _pauseRendering = true;
 
-        Logger.LogDebug("{0} invoked with ids {1}", nameof(UpdateViewportAsync), string.Join(", ", visibleItemIds));
+        LogDebug("{0} invoked with ids {1}", nameof(UpdateViewportAsync), string.Join(", ", visibleItemIds));
 
         var itemIndexes = visibleItemIds
             .Select(id => _items.FindIndex(entry => entry.Id == id))
@@ -103,7 +112,7 @@
         var topViewPortItemIndex = itemIndexes.First();
         var bottomViewPortItemIndex = itemIndexes.Last();
 
-        Logger.LogDebug("Topviewport index is {0}", topViewPortItemIndex);
+        LogDebug("Topviewport index is {0}", topViewPortItemIndex);
 
         _currentItem = _items[topViewPortItemIndex]; //todo
         var anyChange = await UpdateItemsListAsync();
@@ -131,7 +140,7 @@
     /// <returns></returns>
     private async Task<bool> UpdateItemsListAsync()
     {
-        Logger.LogDebug("Updating items list");
+        LogDebug("Updating items list");
         var anyChange = false;
 
         if (await AddBottomItemsIfBottomIsInSightAsync())
@@ -148,7 +157,7 @@
 
         if (anyChange)
         {
-            ScheduleAsyncActionAfterRender(() => JSRuntime.InvokeVoidAsync("bzrVirtualScroller.ensureAllItemIntersectionsAreObserved", _containerElement));
+            ScheduleAsyncActionAfterRender(() => JSRuntime.InvokeVoidAsync("bzrVirtualScroller.ensureAllItemIntersectionsAreObserved", _virtualScrollerObjRef));
         }
 
         return anyChange;
@@ -163,7 +172,7 @@
         if (nrOfItemsBelowCurrentItem < _refreshItemsListThreshold)
         {
             var nrOfItemsToLoad = _wantedNrOfItemsBelowViewPort - nrOfItemsBelowCurrentItem;
-            Logger.LogDebug("Loading {0} items to add to the bottom of the list", nrOfItemsToLoad);
+            LogDebug("Loading {0} items to add to the bottom of the list", nrOfItemsToLoad);
             var newItems = await GetItemsAfterIdAsync(_items.Last().Id, nrOfItemsToLoad);
             _items.AddRange(newItems.Take(nrOfItemsToLoad));
             return true;
@@ -179,11 +188,11 @@
         var nrOfItemsAboveCurrentItem = currentItemIndex;
         if (nrOfItemsAboveCurrentItem < _refreshItemsListThreshold)
         {
-            Logger.LogDebug("Loading items to add to the top of the list");
+            LogDebug("Loading items to add to the top of the list");
             var nrOfItemsToLoad = _wantedNrOfItemsAboveViewPort - nrOfItemsAboveCurrentItem;
             var newItems = await GetItemsBeforeIdAsync(_items[0].Id, nrOfItemsToLoad);
             _items.InsertRange(0, newItems.Take(nrOfItemsToLoad).Reverse());
-            ScheduleAsyncActionAfterRender(async () => await JSRuntime.InvokeAsync<bool>("bzrVirtualScroller.scrollPastTopItems", _containerElement, nrOfItemsToLoad));
+            ScheduleAsyncActionAfterRender(async () => await JSRuntime.InvokeAsync<bool>("bzrVirtualScroller.scrollPastTopItems", _virtualScrollerObjRef, nrOfItemsToLoad));
             return true;
         }
 
@@ -197,7 +206,7 @@
         var nrOfItemsBelowCurrentItem = _items.Count - currentItemIndex;
         if (nrOfItemsBelowCurrentItem > _wantedNrOfItemsBelowViewPort)
         {
-            Logger.LogDebug("Removing items from the bottom of the list");
+            LogDebug("Removing items from the bottom of the list");
             var nrOfItemsToRemove = nrOfItemsBelowCurrentItem - _wantedNrOfItemsBelowViewPort;
             _items = _items.Take(_items.Count - nrOfItemsToRemove).ToList();
         }
@@ -210,7 +219,7 @@
         var nrOfItemsAboveCurrentItem = currentItemIndex;
         if (nrOfItemsAboveCurrentItem > _wantedNrOfItemsAboveViewPort)
         {
-            Logger.LogDebug("Removing items from the top of the list");
+            LogDebug("Removing items from the top of the list");
             var nrOfItemsToRemove = nrOfItemsAboveCurrentItem - _wantedNrOfItemsAboveViewPort;
             _items = _items.Skip(nrOfItemsToRemove).ToList();
         }
@@ -262,7 +271,7 @@
         {
             await Task.Delay(100); //Simulate a delay to see more realistic perf
 
-        if (args.ItemId == null)
+            if (args.ItemId == null)
             {
                 return (IEnumerable<VirtualScrollerEntry>)Enumerable.Range(1, args.NrOfItemsToLoad)
                     .Select(i => new VirtualScrollerEntry { Id = i.ToString(), Value = i.ToString() })
