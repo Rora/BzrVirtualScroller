@@ -38,20 +38,42 @@
     };
 
     return {
-        init: (containerElement, dotnetRef) => {
-            _states.set(dotnetRef._id, {
+        init: (scrollContainerElementSelector, containerElement, dotnetRef) => {
+            let state = {
                 dotnetRef: dotnetRef,
+                scrollContainerElement: null,
                 containerElement: containerElement,
-                observer: new IntersectionObserver((e, o) => onItemEnteredOrLeftViewPort(_states.get(dotnetRef._id), e, o), { root: null, threshold: [0, 0.01] }),
+                observer: null,
                 visibleItemIds: [],
-            });
+            };
+
+            let scrollContainerElement = null
+
+            if (scrollContainerElementSelector !== '') {
+                scrollContainerElement = document.querySelector(scrollContainerElementSelector);
+
+                if (scrollContainerElement === undefined) {
+                    throw 'scrollContainerElementSelector "' + scrollContainerElementSelector + '" found no elements';
+                }
+            }
+
+            var observerOptions = {
+                root: scrollContainerElement,
+                threshold: [0]
+            };
+
+            state.scrollContainerElement = (scrollContainerElement !== null) ? scrollContainerElement : window;
+            state.observer = new IntersectionObserver((e, o) => onItemEnteredOrLeftViewPort(state, e, o), observerOptions);
+
+            _states.set(dotnetRef._id, state);
         },
 
         ensureAllItemIntersectionsAreObserved: (dotnetRef) => {
 
             let markingAttrName = 'intersectionObserverd';
-            var state = _states.get(dotnetRef._id);
+            let state = _states.get(dotnetRef._id);
             let allItems = state.containerElement.children;
+
             for (let i = 0; i < allItems.length; i++) {
 
                 let item = allItems[i];
@@ -75,22 +97,37 @@
                 totalHeightToScroll += outerHeight(items[i]);
             }
 
-            //Curently scrolling the whole page, TODO option to scroll within a container
-            if (window.scrollY < 25) {
+            var scrollTop = state.scrollContainerElement === window
+                ? state.scrollContainerElement.scrollY
+                : state.scrollContainerElement.scrollTop;
+
+            if (scrollTop < 25) {
                 console.log("Scrolling past added top items.");
-                window.scrollBy(0, totalHeightToScroll);
+                state.scrollContainerElement.scrollBy(0, totalHeightToScroll);
             }
 
             return true;
         },
 
-        //TODO make this work for scrolling within a container
         ensureUserIsNotScrolledToTheBottom: (dotnetRef) => {
-            var containerScrollHeight = ((document.documentElement && document.documentElement.scrollHeight) || document.body.scrollHeight);
-            containerScrollHeight = containerScrollHeight - 2; //This fixes an offset issue on macOS
-            if ((window.innerHeight + window.scrollY) >= containerScrollHeight) {
-                // you're at the bottom of the page
-                window.scrollBy(0, -1);
+            let state = _states.get(dotnetRef._id);
+            let scrollWindowHeight;
+            let scrollBottomPosition;
+
+            if (state.scrollContainerElement == window) {
+                scrollWindowHeight = ((document.documentElement && document.documentElement.scrollHeight) || document.body.scrollHeight);
+                scrollWindowHeight = scrollWindowHeight - 2; //This fixes an offset issue on macOS
+                scrollBottomPosition = window.innerHeight + window.scrollY;
+            }
+            else {
+                let scrollCont = state.scrollContainerElement;
+                scrollWindowHeight = scrollCont.scrollHeight;
+                scrollBottomPosition = scrollCont.clientHeight + scrollCont.scrollTop;
+            }
+
+            if (scrollBottomPosition >= scrollWindowHeight) {
+                // you're at the bottom of the scroll container
+                state.scrollContainerElement.scrollBy(0, -1);
             }
         },
 

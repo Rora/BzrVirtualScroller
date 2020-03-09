@@ -19,17 +19,24 @@
 </div>
 
 @code {
-    private static int _lastInstanceNr = 0;
+    /// <summary>
+    /// Selector is used because it's currently noy possible to pass element references as parameter
+    /// See also https://github.com/dotnet/aspnetcore/issues/15187
+    /// </summary>
+    [Parameter]
+    public string ScrollContainerElementSelector { get; set; }
+    private int _wantedNrOfItemsAboveViewPort = 20;
+    private int _wantedNrOfItemsBelowViewPort = 20;
+    private int _refreshItemsListThreshold = 10; //The nr of items remaining before loading new entries
 
+    private static int _lastInstanceNr = 0;
     private int _instanceId;
+
     private DotNetObjectReference<VirtualScroller> _virtualScrollerObjRef;
     private ElementReference _containerElement;
     private List<Func<ValueTask>> _actionsAfterNextRender = new List<Func<ValueTask>>(); //This allows us to call JS after blazor rendered
     private bool _pauseRendering = false; //setting this prevent useless renders on await in the middle of a function
 
-    private int _wantedNrOfItemsAboveViewPort = 20;
-    private int _wantedNrOfItemsBelowViewPort = 20;
-    private int _refreshItemsListThreshold = 10; //The nr of items remaining before loading new entries
     private VirtualScrollerEntry _viewPortTopItem;
     private VirtualScrollerEntry _viewPortBottomItem;
     private List<VirtualScrollerEntry> _items = new List<VirtualScrollerEntry>();
@@ -47,8 +54,8 @@
             .Concat(itemsInViewPort)
             .Concat(await GetItemsAfterIdAsync(itemsInViewPort.Last().Id, _wantedNrOfItemsBelowViewPort))
             .ToList();
-
-        ScheduleAsyncActionAfterRender(() => JSRuntime.InvokeVoidAsync("bzrVirtualScroller.init", _containerElement, _virtualScrollerObjRef));
+        
+        ScheduleAsyncActionAfterRender(() => JSRuntime.InvokeVoidAsync("bzrVirtualScroller.init", ScrollContainerElementSelector, _containerElement, _virtualScrollerObjRef));
         ScheduleAsyncActionAfterRender(() => JSRuntime.InvokeVoidAsync("bzrVirtualScroller.scrollPastTopItems", _virtualScrollerObjRef, itemsBeforeViewPort.Count()));
         ScheduleAsyncActionAfterRender(() => JSRuntime.InvokeVoidAsync("bzrVirtualScroller.ensureAllItemIntersectionsAreObserved", _virtualScrollerObjRef));
     }
