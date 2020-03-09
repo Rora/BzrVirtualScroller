@@ -67,7 +67,8 @@
 
         scrollPastTopItems: (dotnetRef, nrOfItems) => {
 
-            let items = _states.get(dotnetRef._id).containerElement.children;
+            let state = _states.get(dotnetRef._id);
+            let items = state.containerElement.children;
             let totalHeightToScroll = 0;
 
             for (let i = 0; i < nrOfItems; i++) {
@@ -75,7 +76,10 @@
             }
 
             //Curently scrolling the whole page, TODO option to scroll within a container
-            window.scrollBy(0, totalHeightToScroll);
+            if (window.scrollY < 25) {
+                console.log("Scrolling past added top items.");
+                window.scrollBy(0, totalHeightToScroll);
+            }
 
             return true;
         },
