@@ -5,7 +5,7 @@
 @inject ILogger<VirtualScroller> Logger
 @inject IJSRuntime JSRuntime
 
-<div>Current item @_currentItem?.Value</div>
+<div>Current item @_viewPortTopItem?.Value</div>
 <div @ref="_containerElement">
 
     @for (var i = 0; i < _items.Count; i++)
@@ -30,7 +30,8 @@
     private int _wantedNrOfItemsAboveViewPort = 20;
     private int _wantedNrOfItemsBelowViewPort = 20;
     private int _refreshItemsListThreshold = 10; //The nr of items remaining before loading new entries
-    private VirtualScrollerEntry _currentItem;
+    private VirtualScrollerEntry _viewPortTopItem;
+    private VirtualScrollerEntry _viewPortBottomItem;
     private List<VirtualScrollerEntry> _items = new List<VirtualScrollerEntry>();
     private Func<ItemProducerArgs, ValueTask<IEnumerable<VirtualScrollerEntry>>> _itemProducer;
 
@@ -108,9 +109,9 @@
         //Detect outdated calls
         if(itemIndexes.Contains(-1))
         {
-            LogDebug("{0} called with a nonexisting itemId(s), assuming this is an outdated event. visibleItemIds: {1}.", 
+            LogDebug("{0} called with a nonexisting itemId(s), assuming this is an outdated event. visibleItemIds: {1}.",
                 nameof(UpdateViewportAsync), string.Join(", ", visibleItemIds));
-            
+
             _updateViewportLock.Release();
             return;
         }
@@ -122,12 +123,13 @@
             return;
         }
 
-        var topViewPortItemIndex = itemIndexes.First();
-        var bottomViewPortItemIndex = itemIndexes.Last();
+        var viewPortTopItemIndex = itemIndexes.First();
+        var viewPortBottomItemIndex = itemIndexes.Last();
 
-        LogDebug("Topviewport index is {0}", topViewPortItemIndex);
+        LogDebug("Topviewport index is {0}", viewPortTopItemIndex);
 
-        _currentItem = _items[topViewPortItemIndex]; //todo
+        _viewPortTopItem = _items[viewPortTopItemIndex];
+        _viewPortBottomItem = _items[viewPortBottomItemIndex];
         var anyChange = await UpdateItemsListAsync();
 
         if (anyChange)
@@ -178,9 +180,9 @@
 
     private async Task<bool> AddBottomItemsIfBottomIsInSightAsync()
     {
-        var currentItemIndex = _items.IndexOf(_currentItem);
+        var currentItemIndex = _items.IndexOf(_viewPortBottomItem);
 
-        //Check if threshold below current item reached
+        //Check if threshold below viewport reached
         var nrOfItemsBelowCurrentItem = _items.Count - currentItemIndex - 1;
         if (nrOfItemsBelowCurrentItem < _refreshItemsListThreshold)
         {
@@ -199,8 +201,8 @@
 
     private async Task<bool> PrependTopItemsIfTopIsInSightAsync()
     {
-        //Check if threshold above current item reached
-        var currentItemIndex = _items.IndexOf(_currentItem);
+        //Check if threshold above viewport reached
+        var currentItemIndex = _items.IndexOf(_viewPortTopItem);
         var nrOfItemsAboveCurrentItem = currentItemIndex;
         if (nrOfItemsAboveCurrentItem < _refreshItemsListThreshold)
         {
@@ -217,8 +219,8 @@
 
     private void RemoveBottomItemsIfBottomIsFarAway()
     {
-        //Check if there are to many items below the current item
-        var currentItemIndex = _items.IndexOf(_currentItem);
+        //Check if there are to many items below the viewport
+        var currentItemIndex = _items.IndexOf(_viewPortBottomItem);
         var nrOfItemsBelowCurrentItem = _items.Count - currentItemIndex;
         if (nrOfItemsBelowCurrentItem > _wantedNrOfItemsBelowViewPort)
         {
@@ -230,8 +232,8 @@
 
     private void RemoveTopItemsIfTopIsFarAway()
     {
-        //Check if there are to many items above the current item
-        var currentItemIndex = _items.IndexOf(_currentItem);
+        //Check if there are to many items above the viewport
+        var currentItemIndex = _items.IndexOf(_viewPortTopItem);
         var nrOfItemsAboveCurrentItem = currentItemIndex;
         if (nrOfItemsAboveCurrentItem > _wantedNrOfItemsAboveViewPort)
         {
@@ -304,7 +306,7 @@
                 .ToArray();
         };
 
-        _currentItem = null;
+        _viewPortTopItem = null;
     }
 
     public async void Dispose() //IAsyncDisposable not yet supported see https://github.com/dotnet/aspnetcore/issues/9960
