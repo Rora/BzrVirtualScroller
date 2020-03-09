@@ -1,11 +1,8 @@
 ﻿window.bzrVirtualScroller = (function () {
 
-    _containerElement = null;
-    _dotnetRef = null;
-    _observer = null;
-    _visibleItemIds = [];
+    _states = [];
 
-    onItemEnteredOrLeftViewPort = function (entries, observer) {
+    onItemEnteredOrLeftViewPort = function (state, entries, observer) {
         let anyChange = false;
 
         for (var i = 0; i < entries.length; i++) {
@@ -13,22 +10,22 @@
             let entryItemId = entry.target.getAttribute('data-bzr-virtual-scroller-item-id');
             
             if (entry.isIntersecting) {
-                if (!_visibleItemIds.includes(entryItemId)) {
-                    _visibleItemIds.push(entryItemId);
+                if (!state.visibleItemIds.includes(entryItemId)) {
+                    state.visibleItemIds.push(entryItemId);
                     anyChange = true;
                 }
             } else {
-                var itemIndex = _visibleItemIds.indexOf(entryItemId);
+                var itemIndex = state.visibleItemIds.indexOf(entryItemId);
 
                 if (itemIndex !== -1) {
-                    _visibleItemIds.splice(itemIndex, 1);
+                    state.visibleItemIds.splice(itemIndex, 1);
                     anyChange = true;
                 }
             }
         }
 
         if (anyChange) {
-            _dotnetRef.invokeMethodAsync('UpdateViewportAsync', _visibleItemIds);
+            state.dotnetRef.invokeMethodAsync('UpdateViewportAsync', state.visibleItemIds);
         }
     };
 
@@ -42,40 +39,40 @@
 
     return {
         init: (containerElement, dotnetRef) => {
-            _containerElement = containerElement;
-            _dotnetRef = dotnetRef;
-            _observer = new IntersectionObserver(onItemEnteredOrLeftViewPort, { root: null, threshold: [0, 0.01] });
+            _states[containerElement] = {
+                dotnetRef: dotnetRef,
+                observer: new IntersectionObserver((e, o) => onItemEnteredOrLeftViewPort(_states[containerElement], e, o), { root: null, threshold: [0, 0.01] }),
+                visibleItemIds: [],
+            };
         },
 
         /**
         * @param {HTMLElement} containerElement
         */
-        ensureAllItemIntersectionsAreObserved: () => {
+        ensureAllItemIntersectionsAreObserved: (containerElement) => {
 
             let markingAttrName = 'intersectionObserverd';
-            let allItems = _containerElement.children;
+            let allItems = containerElement.children;
             for (let i = 0; i < allItems.length; i++) {
 
                 let item = allItems[i];
                 let markingAttr = item.getAttribute(markingAttrName);
 
                 if (markingAttr !== 'marked') {
-                    console.log('marking...');
-                    this._observer.observe(item);
+                    //Will be unobserved once the dom element is deleted
+                    _states[containerElement].observer.observe(item);
                     item.setAttribute(markingAttrName, 'marked');
                 }
             }
-
-            //Todo unobserve when items are destroyed (if needed)
         },
 
         /**
         * @param {HTMLElement} containerElement
         * @param {Number} nrOfItems
         */
-        scrollPastTopItems: (nrOfItems) => {
+        scrollPastTopItems: (containerElement, nrOfItems) => {
 
-            let items = _containerElement.children;
+            let items = containerElement.children;
             let totalHeightToScroll = 0;
 
             for (let i = 0; i < nrOfItems; i++) {

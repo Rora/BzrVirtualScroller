@@ -45,8 +45,8 @@
             .ToList();
         
         ScheduleAsyncActionAfterRender(() => JSRuntime.InvokeVoidAsync("bzrVirtualScroller.init", _containerElement, _virtualScrollerObjRef));
-        ScheduleAsyncActionAfterRender(() => JSRuntime.InvokeVoidAsync("bzrVirtualScroller.scrollPastTopItems", itemsBeforeViewPort.Count()));
-        ScheduleAsyncActionAfterRender(() => JSRuntime.InvokeVoidAsync("bzrVirtualScroller.ensureAllItemIntersectionsAreObserved"));
+        ScheduleAsyncActionAfterRender(() => JSRuntime.InvokeVoidAsync("bzrVirtualScroller.scrollPastTopItems", _containerElement, itemsBeforeViewPort.Count()));
+        ScheduleAsyncActionAfterRender(() => JSRuntime.InvokeVoidAsync("bzrVirtualScroller.ensureAllItemIntersectionsAreObserved", _containerElement));
     }
 
     private async Task<IEnumerable<VirtualScrollerEntry>> GetItemsAfterIdAsync(string afterItemId, int nrOfItems)
@@ -148,7 +148,7 @@
 
         if (anyChange)
         {
-            ScheduleAsyncActionAfterRender(() => JSRuntime.InvokeVoidAsync("bzrVirtualScroller.ensureAllItemIntersectionsAreObserved"));
+            ScheduleAsyncActionAfterRender(() => JSRuntime.InvokeVoidAsync("bzrVirtualScroller.ensureAllItemIntersectionsAreObserved", _containerElement));
         }
 
         return anyChange;
@@ -183,7 +183,7 @@
             var nrOfItemsToLoad = _wantedNrOfItemsAboveViewPort - nrOfItemsAboveCurrentItem;
             var newItems = await GetItemsBeforeIdAsync(_items[0].Id, nrOfItemsToLoad);
             _items.InsertRange(0, newItems.Take(nrOfItemsToLoad).Reverse());
-            ScheduleAsyncActionAfterRender(async () => await JSRuntime.InvokeAsync<bool>("bzrVirtualScroller.scrollPastTopItems", nrOfItemsToLoad));
+            ScheduleAsyncActionAfterRender(async () => await JSRuntime.InvokeAsync<bool>("bzrVirtualScroller.scrollPastTopItems", _containerElement, nrOfItemsToLoad));
             return true;
         }
 
