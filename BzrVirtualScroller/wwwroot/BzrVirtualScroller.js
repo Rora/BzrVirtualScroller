@@ -96,7 +96,3 @@
         }
     };
 })();
-
-function A() {
-    window.scrollTo(0, ((document.documentElement && document.documentElement.scrollHeight) || document.body.scrollHeight));
-}
