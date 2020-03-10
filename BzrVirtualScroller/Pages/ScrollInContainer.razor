@@ -3,7 +3,13 @@
 @inject ILogger<object> Logger
 @page "/scrollInContainer"
 
-    <h1>Virtual scroller in its own scroll container</h1>
-    <div id="myScrollContainer" style="overflow-y: scroll; height: 500px;">
-        <VirtualScroller TItem="VirtualScrollerEntry" ItemProducer="DummyDataLoader.LoadDataAsync" ItemKeySelector="item => item.Id" ScrollContainerElementSelector="#myScrollContainer" />
-    </div>
+<h1>Virtual scroller in its own scroll container</h1>
+<div id="myScrollContainer" style="overflow-y: scroll; height: 500px;">
+    <VirtualScroller TItem="VirtualScrollerEntry" ItemProducer="DummyDataLoader.LoadDataAsync" ItemKeySelector="item => item.Id" ScrollContainerElementSelector="#myScrollContainer">
+        <ItemTemplate Context="item">
+            <div style="border: 1px solid black; height: 200px; padding: 10px; margin-bottom: 10px;">
+                @item.Value
+            </div>
+        </ItemTemplate>
+    </VirtualScroller>
+</div>

@@ -10,11 +10,11 @@
 
     @for (var i = 0; i < _items.Count; i++)
     {
-        var index = i; /* we do this since i will change in the next iteration so it can't be used in lambda's */
         var item = _items[i];
         var itemId = this.ItemKeySelector(item);
-        <div @key="itemId" data-bzr-virtual-scroller-item-id="@itemId" style="border: 1px solid black; height: 200px; padding: 10px; margin-bottom: 10px;">
-            @((item as VirtualScrollerEntry).Value)
+
+        <div @key="itemId" data-bzr-virtual-scroller-item-id="@itemId">
+            @this.ItemTemplate(item)
         </div>
     }
 </div>
@@ -29,6 +29,8 @@
     public string ScrollContainerElementSelector { get; set; }
     [Parameter]
     public Func<ItemProducerArgs, ValueTask<IEnumerable<TItem>>> ItemProducer { get; set; }
+    [Parameter]
+    public RenderFragment<TItem> ItemTemplate { get; set; }
     /// <summary>
     /// Used to select the key of the item, must be unique
     /// </summary>
@@ -60,12 +62,12 @@
     {
         await base.OnInitializedAsync();
 
-        if(ItemKeySelector == null)
+        if (ItemKeySelector == null)
         {
             throw new InvalidOperationException($"{nameof(ItemKeySelector)} should not be null");
         }
 
-        if(ItemProducer == null)
+        if (ItemProducer == null)
         {
             throw new InvalidOperationException($"{nameof(ItemProducer)} should not be null");
         }

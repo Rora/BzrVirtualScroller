@@ -2,4 +2,10 @@
 @page "/"
 
 <h1>Virtual scroll</h1>
-<VirtualScroller TItem="VirtualScrollerEntry" ItemProducer="DummyDataLoader.LoadDataAsync" ItemKeySelector="item => item.Id" />
+<VirtualScroller TItem="VirtualScrollerEntry" ItemProducer="DummyDataLoader.LoadDataAsync" ItemKeySelector="item => item.Id">
+    <ItemTemplate Context="item">
+        <div style="border: 1px solid black; height: 200px; padding: 10px; margin-bottom: 10px;">
+            @item.Value
+        </div>
+    </ItemTemplate>
+</VirtualScroller>
