@@ -5,5 +5,5 @@
 
     <h1>Virtual scroller in its own scroll container</h1>
     <div id="myScrollContainer" style="overflow-y: scroll; height: 500px;">
-        <VirtualScroller ScrollContainerElementSelector="#myScrollContainer" />
+        <VirtualScroller TItem="VirtualScrollerEntry" ItemProducer="DummyDataLoader.LoadDataAsync" ItemKeySelector="item => item.Id" ScrollContainerElementSelector="#myScrollContainer" />
     </div>

@@ -2,4 +2,4 @@
 @page "/"
 
 <h1>Virtual scroll</h1>
-<VirtualScroller />
+<VirtualScroller TItem="VirtualScrollerEntry" ItemProducer="DummyDataLoader.LoadDataAsync" ItemKeySelector="item => item.Id" />
