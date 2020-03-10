@@ -58,9 +58,9 @@
     private TItem _viewPortBottomItem;
     private List<TItem> _items = new List<TItem>();
 
-    protected override async Task OnInitializedAsync()
+    public override async Task SetParametersAsync(ParameterView parameters)
     {
-        await base.OnInitializedAsync();
+        await base.SetParametersAsync(parameters);
 
         if (ItemKeySelector == null)
         {
@@ -71,6 +71,38 @@
         {
             throw new InvalidOperationException($"{nameof(ItemProducer)} should not be null");
         }
+
+        if(RefreshItemsListThreshold < 1)
+        {
+            throw new InvalidOperationException($"{nameof(RefreshItemsListThreshold)} must be greater then '0'");
+        }
+
+        if(WantedNrOfItemsAboveViewPort < 1)
+        {
+            throw new InvalidOperationException($"{nameof(WantedNrOfItemsAboveViewPort)} must be greater then '0'");
+        }
+
+        if(WantedNrOfItemsBelowViewPort < 1)
+        {
+            throw new InvalidOperationException($"{nameof(WantedNrOfItemsBelowViewPort)} must be greater then '0'");
+        }
+
+        if(RefreshItemsListThreshold >= WantedNrOfItemsAboveViewPort)
+        {
+            throw new InvalidOperationException($"{nameof(RefreshItemsListThreshold)} must be less then {nameof(WantedNrOfItemsAboveViewPort)}");
+        }
+
+        if(RefreshItemsListThreshold >= WantedNrOfItemsBelowViewPort)
+        {
+            throw new InvalidOperationException($"{nameof(RefreshItemsListThreshold)} must be less then {nameof(WantedNrOfItemsBelowViewPort)}");
+        }
+
+        //TODO trigger reload items here
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
 
         _instanceId = ++_lastInstanceNr;
 

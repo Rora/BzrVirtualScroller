@@ -1,0 +1,38 @@
+﻿@using BzrVirtualScroller.Components
+@page "/playground"
+
+<div style="padding: 10px">
+    <Fields>
+        <Field>
+            <FieldLabel>RefreshItemsListThreshold</FieldLabel>
+            <NumericEdit TValue="int" @bind-Value="RefreshItemsListThreshold" />
+        </Field>
+        <Field>
+            <FieldLabel>WantedNrOfItemsAboveViewPort</FieldLabel>
+            <NumericEdit TValue="int" @bind-Value="WantedNrOfItemsAboveViewPort" />
+        </Field>
+        <Field>
+            <FieldLabel>WantedNrOfItemsBelowViewPort</FieldLabel>
+            <NumericEdit TValue="int" @bind-Value="WantedNrOfItemsBelowViewPort" />
+        </Field>
+    </Fields>
+</div>
+<div id="myScrollContainer" style="overflow-y: scroll; height: 500px;">
+    <VirtualScroller TItem="VirtualScrollerEntry" ItemProducer="DummyDataLoader.LoadDataAsync" ItemKeySelector="item => item.Id" ScrollContainerElementSelector="#myScrollContainer"
+                     RefreshItemsListThreshold="@RefreshItemsListThreshold"
+                     WantedNrOfItemsAboveViewPort="@WantedNrOfItemsAboveViewPort"
+                     WantedNrOfItemsBelowViewPort="@WantedNrOfItemsBelowViewPort">
+        <ItemTemplate Context="item">
+            <div style="border: 1px solid black; height: 200px; padding: 10px; margin-bottom: 10px;">
+                @item.Value
+            </div>
+        </ItemTemplate>
+    </VirtualScroller>
+</div>
+
+@code
+{
+    public int RefreshItemsListThreshold { get; set; } = 10;
+    public int WantedNrOfItemsAboveViewPort { get; set; } = 20;
+    public int WantedNrOfItemsBelowViewPort { get; set; } = 20;
+}
